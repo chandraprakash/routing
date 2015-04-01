@@ -270,6 +270,120 @@ mod test {
         assert_eq!((CLIENT_COUNT * MSG_COUNT), responses.len());
     }
 
+// start receiving and keep a clone of sender channel .. and fillin the value each time I get any new message
+
+//use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+    #[test]
+    fn test_cp() {
+        const MSG_COUNT: usize = 5;
+        const CLIENT_COUNT: usize = 101;
+
+        let (listener, u32) = listen().unwrap();
+
+        let mut vector_senders = Vec::new();
+        let mut vector_receiver = Vec::new();
+        for _ in 0..CLIENT_COUNT {
+            let (i, o) = connect_tcp(SocketAddr::from_str("127.0.0.1:5483").unwrap()).unwrap();
+            let boxed_output: Box<OutTcpStream<u64>> = Box::new(o);
+            vector_senders.push(boxed_output);
+            let boxed_input: Box<InTcpStream<(u64, u64)>> = Box::new(i);
+            vector_receiver.push(boxed_input);
+        }
+
+        //  send
+        for mut v in &mut vector_senders {
+            for x in 0u64 .. MSG_COUNT as u64 {
+                if v.send(&x).is_err() { break; }
+            }
+        }
+
+        //  close sender
+        loop {
+           let sender = match vector_senders.pop() {
+                None => break, // empty
+                Some(sender) => sender.close(),
+            };
+        }
+        // tx rx
+        let (tx, rx): (mpsc::Sender<u64>, mpsc::Receiver<u64>) = mpsc::channel();
+        let thread_tx = tx.clone();
+        // listener
+        thread::spawn(move || {
+            for (connection, u32) in listener.into_blocking_iter() {
+                // Spawn a new thread for each connection that we get.
+                thread::spawn(move || {
+                    let (i, mut o) = upgrade_tcp(connection).unwrap();
+                    for x in i.into_blocking_iter() {
+                        thread_tx.send(x).unwrap();
+                        if o.send(&(x, x + 1)).is_err() { break; }
+                    }
+                });
+            }
+        });
+
+        // Collect server's incoming messages
+        let mut req = Vec::with_capacity(500);
+        for _ in 0..500 {
+        // The `recv` method picks a message from the channel
+        // `recv` will block the current thread if there no messages available
+        req.push(rx.recv());
+    }
+
+
+
+        // Collect everything that we get back.
+        let mut responses: Vec<(u64, u64)> = Vec::new();
+
+        loop {
+           let receiver = match vector_receiver.pop() {
+                None => break, // empty
+                Some(receiver) =>
+                {
+                    for a in (*receiver).into_blocking_iter() {
+                        responses.push(a);
+                    }
+                }
+            };
+        }
+
+        println!("Responses: {:?}", responses);
+        assert_eq!((CLIENT_COUNT * MSG_COUNT), responses.len());
+    }
+
+#[test]
+fn test_shared_channel() {
+    const NTHREADS: usize = 3;
+    let (tx, rx): (mpsc::Sender<usize>, mpsc::Receiver<usize>) = mpsc::channel();
+
+    for id in 0..NTHREADS {
+        // The sender endpoint can be copied
+        let thread_tx = tx.clone();
+
+        // Each thread will send its id via the channel
+        thread::spawn(move || {
+            // The thread takes ownership over `thread_tx`
+            // Each thread queues a message in the channel
+            thread_tx.send(id).unwrap();
+
+            // Sending is a non-blocking operation, the thread will continue
+            // immediately after sending its message
+            println!("thread {} finished", id);
+        });
+    }
+
+    // Here, all the messages are collected
+    let mut ids = Vec::with_capacity(NTHREADS);
+    for _ in 0..NTHREADS {
+        // The `recv` method picks a message from the channel
+        // `recv` will block the current thread if there no messages available
+        ids.push(rx.recv());
+    }
+
+    // Show the order in which the messages were sent
+    println!("{:?}", ids);
+
+}
 
 // #[test]
 // fn test_stream_large_data() {
