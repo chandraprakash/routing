@@ -270,7 +270,7 @@ mod test {
         assert_eq!((CLIENT_COUNT * MSG_COUNT), responses.len());
     }
 
-// start receiving and keep a clone of sender channel .. and fillin the value each time I get any new message
+// start receiving and keep a clone of sender channel .. and fill in the value each time I get any new message
 
 //use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
@@ -307,10 +307,11 @@ use std::sync::mpsc;
         }
         // tx rx
         let (tx, rx): (mpsc::Sender<u64>, mpsc::Receiver<u64>) = mpsc::channel();
-        let thread_tx = tx.clone();
+
         // listener
         thread::spawn(move || {
             for (connection, u32) in listener.into_blocking_iter() {
+                let thread_tx = tx.clone();
                 // Spawn a new thread for each connection that we get.
                 thread::spawn(move || {
                     let (i, mut o) = upgrade_tcp(connection).unwrap();
@@ -327,7 +328,8 @@ use std::sync::mpsc;
         for _ in 0..500 {
         // The `recv` method picks a message from the channel
         // `recv` will block the current thread if there no messages available
-        req.push(rx.recv());
+        req.push(rx.recv().unwrap());
+        print!("RXD");
     }
 
 
