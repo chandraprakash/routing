@@ -147,7 +147,7 @@ fn start_accepting_connections(state: WeakState) -> IoResult<()> {
     println!("start_accepting_connections");
     let (event_receiver, listener) = try!(listen());
 
-    let local_port = try!(listener.local_addr()).port();
+    let local_port = try!(listener.local_addr()).port();  // Consider backlog
 
     try!(lock_state(&state, |s| {
         s.event_pipe.send(Event::AcceptingOn(local_port)).or(Ok(()))
@@ -207,7 +207,7 @@ fn start_reading_thread(state: WeakState, i: SocketReader, his_id: Address, sink
     spawn(move || {
         for msg in i.into_blocking_iter() {
             if sink.send(Event::NewMessage(his_id.clone(), msg)).is_err() {
-              return;  // exit thread if sink closed
+              break;
             }
         }
         unregister_connection(state, his_id);
@@ -282,8 +282,9 @@ mod test {
 
 #[test]
     fn connection_manager() {
-        let spawn_node = |id| {
+        let spawn_node = |id: Vec<u8>| {
             spawn(||{
+                let id_copy = id.clone();
                 let (i, o) = bchannel::channel();
                 let cm = ConnectionManager::new(id, i);
                 for i in o.into_blocking_iter() {
@@ -297,8 +298,16 @@ mod test {
                         },
                         Event::NewConnection(_) => {
                             println!("Connected");
-                            break;
+                            if id_copy == vec![1] {
+                                assert!(cm.send(vec![2], vec![2]).is_ok());
+                            } else {
+                                assert!(cm.send(vec![1], vec![1]).is_ok());
+                            }
                         },
+                        Event::NewMessage(x, y) => {
+                            println!("new message !");
+                            break;
+                        }
                         _ => println!("unhandled"),
                     }
                 }
