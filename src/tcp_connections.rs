@@ -182,7 +182,7 @@ mod test {
     use std::net::{SocketAddr};
     use std::str::FromStr;
 
-// #[test]
+ #[test]
     fn test_small_stream() {
         let (listener, u32) = listen().unwrap();
         let (i, mut o) = connect_tcp(SocketAddr::from_str("127.0.0.1:5483").unwrap()).unwrap();
@@ -192,22 +192,35 @@ mod test {
         }
         o.close();
         thread::spawn(move || {
-            for (connection, u32) in listener.into_blocking_iter() {
-                // Spawn a new thread for each connection that we get.
-                thread::spawn(move || {
-                    let (i, mut o) = upgrade_tcp(connection).unwrap();
-                    let i = i.blocking_iter(); 
-                    let vec : Vec<u64> = i.collect();
-                    for &x in vec.iter() {
-                        if o.send(&(x, x + 1)).is_err() { break; }
-                    }
-                });
+            loop {
+                match listener.iter().next() {
+                    Some(x) => {
+                        let (connection, _) = x;
+                        // Spawn a new thread for each connection that we get.
+                        thread::spawn(move || {
+                            let (i, mut o) = upgrade_tcp(connection).unwrap();
+                            loop {
+                                match i.iter().next() {
+                                    Some(x) => {
+                                        let x:u32 = x;
+                                        if o.send(&(x, x + 1)).is_err() { break; }
+                                    },
+                                    None => { break;}
+                                }
+                            }
+                        });
+                    },
+                    None => { break;}
+                }
             }
         });
         // Collect everything that we get back.
         let mut responses: Vec<(u64, u64)> = Vec::new();
-        for a in i.into_blocking_iter() {
-            responses.push(a);
+        loop {
+            match i.iter().next() {
+                Some(a) => responses.push(a),
+                None => break
+            }
         }
         println!("Responses: {:?}", responses);
         assert_eq!(10, responses.len());
