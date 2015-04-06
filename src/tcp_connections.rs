@@ -19,13 +19,13 @@
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use std::io::{BufReader, ErrorKind};
 use std::io::Result as IoResult;
-use std::io::Error as IoError;
+//use std::io::Error as IoError;
 use cbor::{Encoder, CborError, Decoder};
 use std::thread::spawn;
 use std::marker::PhantomData;
 use rustc_serialize::{Decodable, Encodable};
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver};
 
 pub type InTcpStream<T> = Receiver<T>;
 
@@ -42,21 +42,6 @@ where T: Encodable {
     pub fn send(&mut self, m: &T) -> Result<(), CborError> {
         let mut e = Encoder::from_writer(&mut self.tcp_stream);
         e.encode(&[&m])
-    }
-
-    pub fn send_all<'b, I: Iterator<Item = &'b T>>(&mut self, mut i: I) ->
-    Result<(), (&'b T, I, CborError)> {
-        loop {
-            match i.next() {
-                None => return Ok(()),
-                Some(x) => {
-                    match self.send(x) {
-                        Ok(()) => {},
-                        Err(e) => return Err((x, i, e))
-                    }
-                }
-            }
-        }
     }
 
     pub fn close(self) {
@@ -190,35 +175,22 @@ mod test {
         }
         o.close();
         thread::spawn(move || {
-            loop {
-                match listener.iter().next() {
-                    Some(x) => {
-                        let (connection, _) = x;
-                        // Spawn a new thread for each connection that we get.
-                        thread::spawn(move || {
-                            let (i, mut o) = upgrade_tcp(connection).unwrap();
-                            loop {
-                                match i.iter().next() {
-                                    Some(x) => {
-                                        let x:u32 = x;
-                                        if o.send(&(x, x + 1)).is_err() { break; }
-                                    },
-                                    None => { break;}
-                                }
-                            }
-                        });
-                    },
-                    None => { break;}
-                }
+            for x in listener.iter() {
+                let (connection, _) = x;
+                // Spawn a new thread for each connection that we get.
+                thread::spawn(move || {
+                    let (i, mut o) = upgrade_tcp(connection).unwrap();
+                    for x in i.iter() {
+                        let x:u32 = x;
+                        if o.send(&(x, x + 1)).is_err() { break; }
+                    }
+                });
             }
         });
         // Collect everything that we get back.
         let mut responses: Vec<(u64, u64)> = Vec::new();
-        loop {
-            match i.iter().next() {
-                Some(a) => responses.push(a),
-                None => break
-            }
+        for a in i.iter() {
+            responses.push(a);
         }
         println!("Responses: {:?}", responses);
         assert_eq!(10, responses.len());
@@ -258,26 +230,16 @@ mod test {
 
         // listener
         thread::spawn(move || {
-            loop {
-                match listener.iter().next() {
-                    Some(x) => {
-                        let (connection, _) = x;
-                        // Spawn a new thread for each connection that we get.
-                        thread::spawn(move || {
-                            let (i, mut o) = upgrade_tcp(connection).unwrap();
-                            loop {
-                                match i.iter().next() {
-                                    Some(x) => {
-                                        let x:u32 = x;
-                                        if o.send(&(x, x + 1)).is_err() { break; }
-                                    },
-                                    None => { break;}
-                                }
-                            }
-                        });
-                    },
-                    None => { break;}
-                }
+            for x in listener.iter() {
+                let (connection, _) = x;
+                // Spawn a new thread for each connection that we get.
+                thread::spawn(move || {
+                    let (i, mut o) = upgrade_tcp(connection).unwrap();
+                    for x in i.iter() {
+                        let x:u32 = x;
+                        if o.send(&(x, x + 1)).is_err() { break; }
+                    }
+                });
             }
         });
 
@@ -288,11 +250,8 @@ mod test {
            let receiver = match vector_receiver.pop() {
                 None => break, // empty
                 Some(receiver) => {
-                    loop {
-                        match receiver.iter().next() {
-                            Some(a) => responses.push(a),
-                            None => break
-                        }
+                    for a in receiver.iter() {
+                        responses.push(a);
                     }
                 }
             };
