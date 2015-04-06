@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use std::thread::spawn;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
-// use bchannel::Sender;
 use tcp_connections::{listen, connect_tcp, TcpReader, TcpWriter, upgrade_tcp};
 use std::sync::{Arc, Mutex, Weak};
 use std::sync::mpsc;
