@@ -24,11 +24,9 @@ use cbor::{Encoder, CborError, Decoder};
 use std::thread::spawn;
 use std::marker::PhantomData;
 use rustc_serialize::{Decodable, Encodable};
-use bchannel::channel;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
-//pub use bchannel::Receiver;
 pub type InTcpStream<T> = Receiver<T>;
 
 pub type TcpReader<T> = Receiver<T>;
@@ -226,72 +224,83 @@ mod test {
         assert_eq!(10, responses.len());
     }
 
-// #[test]
-    // fn test_multiple_client_small_stream() {
-    //     const MSG_COUNT: usize = 5;
-    //     const CLIENT_COUNT: usize = 101;
+#[test]
+    fn test_multiple_client_small_stream() {
+        const MSG_COUNT: usize = 5;
+        const CLIENT_COUNT: usize = 101;
 
-    //     let (listener, u32) = listen().unwrap();
-    //     let mut vector_senders = Vec::new();
-    //     let mut vector_receiver = Vec::new();
-    //     for _ in 0..CLIENT_COUNT {
-    //         let (i, o) = connect_tcp(SocketAddr::from_str("127.0.0.1:5483").unwrap()).unwrap();
-    //         let boxed_output: Box<OutTcpStream<u64>> = Box::new(o);
-    //         vector_senders.push(boxed_output);
-    //         let boxed_input: Box<InTcpStream<(u64, u64)>> = Box::new(i);
-    //         vector_receiver.push(boxed_input);
-    //     }
+        let (listener, u32) = listen().unwrap();
+        let mut vector_senders = Vec::new();
+        let mut vector_receiver = Vec::new();
+        for _ in 0..CLIENT_COUNT {
+            let (i, o) = connect_tcp(SocketAddr::from_str("127.0.0.1:5483").unwrap()).unwrap();
+            let boxed_output: Box<OutTcpStream<u64>> = Box::new(o);
+            vector_senders.push(boxed_output);
+            let boxed_input: Box<InTcpStream<(u64, u64)>> = Box::new(i);
+            vector_receiver.push(boxed_input);
+        }
 
-    //     //  send
-    //     for mut v in &mut vector_senders {
-    //         for x in 0u64 .. MSG_COUNT as u64 {
-    //             if v.send(&x).is_err() { break; }
-    //         }
-    //     }
+        //  send
+        for mut v in &mut vector_senders {
+            for x in 0u64 .. MSG_COUNT as u64 {
+                if v.send(&x).is_err() { break; }
+            }
+        }
 
-    //     //  close sender
-    //     loop {
-    //        let sender = match vector_senders.pop() {
-    //             None => break, // empty
-    //             Some(sender) => sender.close(),
-    //         };
-    //     }
-        
-
-    //     // listener
-    //     thread::spawn(move || {
-    //         for (connection, u32) in listener.into_blocking_iter() {
-    //             // Spawn a new thread for each connection that we get.
-    //             thread::spawn(move || {
-    //                 let (i, mut o) = upgrade_tcp(connection).unwrap();
-    //                 let i = i.blocking_iter(); 
-    //                 let vec : Vec<u64> = i.collect();
-    //                 for &x in vec.iter() {
-    //                     if o.send(&(x, x + 1)).is_err() { break; }
-    //                 }
-    //             });
-    //         }
-    //     });
+        //  close sender
+        loop {
+           let sender = match vector_senders.pop() {
+                None => break, // empty
+                Some(sender) => sender.close(),
+            };
+        }
 
 
-    //     // Collect everything that we get back.
-    //     let mut responses: Vec<(u64, u64)> = Vec::new();
+        // listener
+        thread::spawn(move || {
+            loop {
+                match listener.iter().next() {
+                    Some(x) => {
+                        let (connection, _) = x;
+                        // Spawn a new thread for each connection that we get.
+                        thread::spawn(move || {
+                            let (i, mut o) = upgrade_tcp(connection).unwrap();
+                            loop {
+                                match i.iter().next() {
+                                    Some(x) => {
+                                        let x:u32 = x;
+                                        if o.send(&(x, x + 1)).is_err() { break; }
+                                    },
+                                    None => { break;}
+                                }
+                            }
+                        });
+                    },
+                    None => { break;}
+                }
+            }
+        });
 
-    //     loop {
-    //        let receiver = match vector_receiver.pop() {
-    //             None => break, // empty
-    //             Some(receiver) =>
-    //             {
-    //                 for a in (*receiver).into_blocking_iter() {
-    //                     responses.push(a);
-    //                 }
-    //             }
-    //         };
-    //     }
+        // Collect everything that we get back.
+        let mut responses: Vec<(u64, u64)> = Vec::new();
 
-    //     println!("Responses: {:?}", responses);
-    //     assert_eq!((CLIENT_COUNT * MSG_COUNT), responses.len());
-    // }
+        loop {
+           let receiver = match vector_receiver.pop() {
+                None => break, // empty
+                Some(receiver) => {
+                    loop {
+                        match receiver.iter().next() {
+                            Some(a) => responses.push(a),
+                            None => break
+                        }
+                    }
+                }
+            };
+        }
+
+        println!("Responses: {:?}", responses);
+        assert_eq!((CLIENT_COUNT * MSG_COUNT), responses.len());
+    }
 
 
 // #[test]
