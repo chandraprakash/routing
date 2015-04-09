@@ -60,22 +60,31 @@ pub static GROUP_SIZE: u32 = 23;
 pub static QUORUM_SIZE: u32 = 19;
 
 #[derive(PartialEq, Eq, Hash, Clone, RustcEncodable, RustcDecodable, PartialOrd, Ord, Debug)]
-pub struct DhtId(Vec<u8>);
+pub struct DhtId(pub Vec<u8>);
 
 impl DhtId {
     pub fn new(slice: [u8; 64]) -> DhtId {
-        unimplemented!();
+        DhtId(array_as_vector(&slice))
     }
 
     pub fn generate_random() -> DhtId {
         DhtId(generate_random_vec_u8(64))
+    }
+
+    pub fn is_valid(&self) -> bool {
+        for it in self.0.iter() {
+            if *it != 0 {
+                return true;
+            }
+        }
+        false
     }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum Authority {
   ClientManager,  // from a node in our range but not routing table
-  NaeManager,     // Target (name()) is in the group we are in 
+  NaeManager,     // Target (name()) is in the group we are in
   NodeManager,    // recieved from a node in our routing table (Handle refresh here)
   ManagedNode,    // in our group and routing table
   ManagedClient,  // in our group
@@ -270,10 +279,10 @@ impl Pmid {
   pub fn new() -> Pmid {
     let (pub_sign_key, sec_sign_key) = sodiumoxide::crypto::sign::gen_keypair();
     let (pub_asym_key, sec_asym_key) = sodiumoxide::crypto::asymmetricbox::gen_keypair();
-    
+
     let sign_arr = &pub_sign_key.0;
     let asym_arr = &pub_asym_key.0;
-    
+
     let mut arr_combined = [0u8; 64 * 2];
 
     for i in 0..sign_arr.len() {
