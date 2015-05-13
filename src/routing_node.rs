@@ -572,7 +572,8 @@ impl<F> RoutingNode<F> where F: Interface {
         if !added {
             return Err(RoutingError::AlreadyConnected);  // FIXME can also be not added to rt
         }
-        println!("RT add {:?} -- ", peer_node_info.fob.name);
+        println!("RT add {:?} -- ep {:?} {:?}", peer_node_info.fob.name, connect_request.local_endpoints.clone(),
+                                                  connect_request.external_endpoints.clone());
 
         // Try to connect to the peer.
         self.connection_manager.connect(connect_request.local_endpoints.clone());
@@ -603,7 +604,27 @@ impl<F> RoutingNode<F> where F: Interface {
         if !added {
            return Ok(());
         }
-        println!("[ RT add {:?}", peer_node_info.fob.name);
+        println!("[ RT add {:?} ep : {:?} , {:?}", peer_node_info.fob.name,
+            connect_response.receiver_local_endpoints.clone(),
+            connect_response.receiver_external_endpoints.clone());
+        if self.bootstrap_endpoint.is_some() {
+            if connect_response.receiver_local_endpoints.iter().any(|ep| *ep == self.bootstrap_endpoint.clone().unwrap()) {
+                let res = self.routing_table.mark_as_connected(&self.bootstrap_endpoint.clone().unwrap());
+                if res.is_some() {
+                    println!("RT marked connected peer_id : {:?} , peer_ep : {:?}", peer_node_info.fob.name,
+                         self.bootstrap_endpoint.clone().unwrap());
+                } else {
+                    println!("Failed !! RT marked connected peer_id : {:?} , peer_ep : {:?}", peer_node_info.fob.name,
+                         self.bootstrap_endpoint.clone().unwrap());
+                }
+
+                return Ok(());
+            } else {
+                println!("No Bs Endpoint in  connect_response");
+            }
+        } else {
+            println!("No Bs Endpoint");
+        }
 
         // Try to connect to the peer.
         self.connection_manager.connect(connect_response.receiver_local_endpoints.clone());
